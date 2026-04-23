@@ -6,7 +6,7 @@ app = Flask(__name__)
 # ------------------ DATABASE ------------------
 
 def get_conn():
-    return sqlite3.connect("emails.db")
+    return sqlite3.connect("emails.db", check_same_thread=False)
 
 def init_db():
     conn = get_conn()
@@ -34,13 +34,26 @@ def seed_data():
     count = cur.fetchone()[0]
 
     if count == 0:
-        cur.execute("""
+        data = [
+            ("1", "google", "interview call for role", "Interview", 0, 0),
+            ("2", "google", "interview call for role", "Interview", 0, 0),
+            ("3", "google", "interview call for internship", "Interview", 0, 0)
+        ]
+
+        cur.executemany("""
         INSERT INTO emails (id, sender, subject, category, opened, clicked)
-        VALUES ('1', 'Amazon', 'Big Sale', 'Promotion', 0, 0)
-        """)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """, data)
 
     conn.commit()
     conn.close()
+
+
+# 🔥 VERY IMPORTANT FOR RENDER
+@app.before_request
+def setup_db():
+    init_db()
+    seed_data()
 
 
 # ------------------ ROUTES ------------------
@@ -50,7 +63,6 @@ def home():
     return "Email Tracker API is running"
 
 
-# GET EMAILS
 @app.route("/emails")
 def get_emails():
     conn = get_conn()
@@ -74,35 +86,30 @@ def get_emails():
     return jsonify(emails)
 
 
-# TRACK OPEN
 @app.route("/track/<email_id>")
 def track_open(email_id):
     conn = get_conn()
     cur = conn.cursor()
 
     cur.execute("UPDATE emails SET opened = opened + 1 WHERE id = ?", (email_id,))
-
     conn.commit()
     conn.close()
 
     return "Open Tracked"
 
 
-# TRACK CLICK
 @app.route("/click/<email_id>")
 def track_click(email_id):
     conn = get_conn()
     cur = conn.cursor()
 
     cur.execute("UPDATE emails SET clicked = clicked + 1 WHERE id = ?", (email_id,))
-
     conn.commit()
     conn.close()
 
     return "Click Tracked"
 
 
-# DASHBOARD
 @app.route("/dashboard")
 def dashboard():
     email_type = request.args.get("type")
@@ -129,7 +136,6 @@ def dashboard():
             "clicked": row[5]
         })
 
-    # ANALYTICS
     total_emails = len(emails)
     total_opened = sum(e["opened"] for e in emails)
     total_clicked = sum(e["clicked"] for e in emails)
@@ -137,7 +143,6 @@ def dashboard():
     open_rate = (total_opened / total_emails * 100) if total_emails > 0 else 0
     click_rate = (total_clicked / total_emails * 100) if total_emails > 0 else 0
 
-    # UI
     html = """
     <html>
     <head>
@@ -158,8 +163,7 @@ def dashboard():
 
     <div class="box">
     <a href="/dashboard">All</a>
-    <a href="/dashboard?type=Promotion">Promotion</a>
-    <a href="/dashboard?type=Social">Social</a>
+    <a href="/dashboard?type=Interview">Interview</a>
     </div>
     """
 
@@ -195,6 +199,4 @@ def dashboard():
 # ------------------ RUN ------------------
 
 if __name__ == "__main__":
-    init_db()
-    seed_data()
     app.run(host="0.0.0.0", port=5000)
